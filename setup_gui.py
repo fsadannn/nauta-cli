@@ -4,7 +4,7 @@ from cx_Freeze import setup, Executable
 
 base = None
 if sys.platform == 'win32':
-    base = 'Console'
+    base = 'Win32GUI'
 
 options = {
     'build_exe': {
@@ -16,15 +16,13 @@ options = {
 }
 
 executables = [
-    Executable('main.py', base=base,
-               targetName='nauta_cli.exe',),
     Executable('nauta_gui.py', base=base,
                targetName='nauta_gui.exe',)
 ]
 
 setup(name='nauta_cli',
-      version='3.0.0',
-      description='cli and gui for control nauta connection and accounts',
+      version='1.0.1',
+      description='gui for control nauta connection and accounts',
       options=options,
       executables=executables
       )
