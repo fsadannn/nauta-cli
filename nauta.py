@@ -46,7 +46,10 @@ ERROR = 2
 DEBUG = 3
 
 def log(*args, **kwargs):
-    date = subprocess.check_output("date").decode().strip()
+    if sys.platform == 'win32':
+        date = subprocess.check_output(['cmd.exe','/c','date','/T']).decode().strip()
+    else:
+        date = subprocess.check_output("date").decode().strip()
     kwargs.update(dict(file=logfile))
     print(
         "{:.3f} ({})".format(
@@ -434,6 +437,8 @@ class Nauta:
         if user is None:
             callback("Invalid card: {}".format(usern), ERROR)
             return 1
+        if isinstance(user,str):
+        	user = self.__data.get(user)
         password = user.password
         username = user.username
 
@@ -541,9 +546,12 @@ class Nauta:
             return
 
         user = self.__data.get(usern)
+        # print(user,type(user))
         if user is None:
             print("Invalid card: {}".format(usern))
             return
+        if isinstance(user,str):
+        	user = self.__data.get(user)
         password = user.password
         username = user.username
 
