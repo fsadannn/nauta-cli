@@ -97,7 +97,8 @@ class NautaGUI(QWidget):
         self.cb.activated.connect(self.choise)
         self.start.clicked.connect(self.up)
         self.stop.clicked.connect(self.down)
-        self.choise(self.cb.currentIndex())
+        if self.cb.count()!=0:
+            self.choise(self.cb.currentIndex())
 
     def wraplog(self, txt, inf):
         self.logginn.emit(txt, inf)
