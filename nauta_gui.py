@@ -5,6 +5,12 @@ from PyQt5.QtWidgets import QTextEdit, QDockWidget, QTabWidget
 from PyQt5.QtCore import Qt, pyqtSignal, pyqtSlot, QTimer, QTime
 from PyQt5.QtWidgets import QComboBox, QLabel, QLineEdit, QLCDNumber
 from PyQt5.QtWidgets import QVBoxLayout, QHBoxLayout, QPushButton
+from PyQt5.QtWidgets import QListWidget, QButtonGroup, QRadioButton
+from PyQt5.QtWidgets import QInputDialog, QDialog, QCheckBox, QMessageBox
+from PyQt5.QtCore import QObject
+import qtawesome as qta
+import requests
+
 
 INFORMATION = 0
 WARNING = 1
@@ -22,6 +28,62 @@ def logcolor(txt, level):
 
 def logsize(txt, size):
     return "<h"+str(size)+">"+txt+"</h"+str(size)+">"
+
+def tr(txt):
+    return txt
+
+class NautaWrap:
+    def __init__(self):
+        self._active=False
+        self._used_account=None
+        self.nauta=Nauta()
+        self.clock=None
+        self._f_load_u_ntgui=None
+        self._f_load_u_ugui=None
+
+    def set_f_load_u_ntgui(self, callb):
+        self._f_load_u_ntgui=callb
+
+    def set_f_load_u_ugui(self, callb):
+        self._f_load_u_ugui=callb
+
+    def activate(self):
+        self._active=True
+
+    def set_account(self, acc):
+        self._used_account=acc
+
+    def deactivate(self):
+        self._active=False
+
+    def update_u(self):
+        if self._f_load_u_ntgui:
+            self._f_load_u_ntgui()
+        if self._f_load_u_ugui:
+            self._f_load_u_ugui()
+
+    @property
+    def active(self):
+        return self._active
+
+    @property
+    def account(self):
+        return self._used_account
+
+nautaw = NautaWrap()
+
+class Logger(QObject):
+    __slots__ = ('__name', '__signal')
+    def __init__(self, name, signal):
+        self.__name = name
+        self.__signal = signal
+
+    def emit(self, txt, num):
+        self.__signal.emit(self.__name, txt, num)
+
+    @property
+    def signal(self):
+        return self.__signal
 
 class DigitalClock(QLCDNumber):
 
@@ -52,32 +114,34 @@ class DigitalClock(QLCDNumber):
         self.display(text)
 
 class NautaGUI(QWidget):
-    logginn = pyqtSignal(str, int)
+    logginn = pyqtSignal(str, str, int)
 
     def __init__(self):
         super(NautaGUI, self).__init__()
-        self.nauta = Nauta()
+        self.nautaw = nautaw
+        self.nautaw.set_f_load_u_ntgui(self.load_users)
+        self.nauta = self.nautaw.nauta
+        self.loggin = Logger('NautaGUI', self.logginn)
 
         self.cl = QVBoxLayout()
 
         self.cb = QComboBox()
-        for i in self.nauta.get_cards(True):
-            self.cb.addItem(i['username'])
+        self.load_users()
         self.cl.addWidget(self.cb)
 
         tt2 = QVBoxLayout()
         tt = QHBoxLayout()
-        tt.addWidget(QLabel('Username'))
+        tt.addWidget(QLabel('Nombre de ususario:'))
         self.username = QLabel('')
         tt.addWidget(self.username)
         tt2.addLayout(tt)
         tt = QHBoxLayout()
-        tt.addWidget(QLabel('Time_left'))
+        tt.addWidget(QLabel('Tiempor restante:'))
         self.time_left = QLabel('')
         tt.addWidget(self.time_left)
         tt2.addLayout(tt)
         tt = QHBoxLayout()
-        tt.addWidget(QLabel('Expire_date'))
+        tt.addWidget(QLabel('Fecha de expiración:'))
         self.expire_date = QLabel('')
         tt.addWidget(self.expire_date)
         tt2.addLayout(tt)
@@ -87,10 +151,21 @@ class NautaGUI(QWidget):
         self.cl.addWidget(self.clock)
 
         tt = QHBoxLayout()
-        self.start = QPushButton('Start')
-        self.stop = QPushButton('Stop')
+        start = qta.icon(
+            'mdi.play',
+            color='green',
+            color_active='yellow')
+        self.start = QPushButton(start,"")
+        stop = qta.icon(
+            'mdi.stop',
+            color='red',
+            color_active='yellow')
+        self.stop = QPushButton(stop,"")
+        tt.addStretch()
         tt.addWidget(self.start)
+        tt.addStretch()
         tt.addWidget(self.stop)
+        tt.addStretch()
         self.cl.addLayout(tt)
 
         self.setLayout(self.cl)
@@ -100,8 +175,14 @@ class NautaGUI(QWidget):
         if self.cb.count()!=0:
             self.choise(self.cb.currentIndex())
 
+    def load_users(self):
+        self.cb.clear()
+        for i in sorted(self.nauta.get_cards(True),key=lambda x: x['username']):
+            self.cb.addItem(i['username'])
+        #self.cb.repaint()
+
     def wraplog(self, txt, inf):
-        self.logginn.emit(txt, inf)
+        self.loggin.emit(txt, inf)
 
     @pyqtSlot()
     def up(self):
@@ -110,6 +191,7 @@ class NautaGUI(QWidget):
             if self.nauta.up_gui(user, self.wraplog):
                 return
             self.clock.start()
+            self.nautaw.activate()
 
     @pyqtSlot()
     def down(self):
@@ -117,34 +199,201 @@ class NautaGUI(QWidget):
             if self.nauta.down_gui(self.wraplog):
                 return
             self.clock.stop()
+            self.nautaw.deactivate()
 
     @pyqtSlot(int)
     def choise(self, index):
         item = self.cb.itemText(index)
         data = self.nauta.get_card(item, True)
-        txt = 'User Info:'
-        self.logginn.emit(txt, INFORMATION)
+        txt = 'Información de Usuario:'
+        self.loggin.emit(txt, INFORMATION)
         tt = str(data['username'])
-        txt = 'username: '+tt
+        self.nautaw.set_account(tt)
+        txt = 'Nombre de ususario: '+tt
         self.username.setText(tt)
-        self.logginn.emit(txt, INFORMATION)
+        self.loggin.emit(txt, INFORMATION)
         tt=str(data['time_left'])
-        txt = 'time_left: '+tt
+        txt = 'Tiempo restante: '+tt
         self.time_left.setText(tt)
-        self.logginn.emit(txt, INFORMATION)
+        self.loggin.emit(txt, INFORMATION)
         tt = str(data['expire_date'])
-        txt = 'expire_date: '+tt
+        txt = 'Fecha de expiración: '+tt
         self.expire_date.setText(tt)
-        self.logginn.emit(txt, INFORMATION)
+        self.loggin.emit(txt, INFORMATION)
+
+class UsersGUI(QWidget):
+
+    logginn = pyqtSignal(str, str, int)
+
+    def __init__(self):
+        super(UsersGUI, self).__init__()
+        self.loggin = Logger('UsersGUI', self.logginn)
+        self.nautaw = nautaw
+        self.nautaw.set_f_load_u_ugui(self.load_users)
+        self.nauta = self.nautaw.nauta
+
+        self.cl = QVBoxLayout()
+
+        self.li = QListWidget()
+        self.load_users()
+        self.cl.addWidget(self.li)
+
+        tt = QHBoxLayout()
+        addu = qta.icon(
+            'mdi.account-plus',
+            color='green',
+            color_active='yellow')
+        self.addu = QPushButton(addu,"")
+        editu = qta.icon(
+            'mdi.account-edit',
+            color='blue',
+            color_active='yellow')
+        self.editu = QPushButton(editu,"")
+        remu = qta.icon(
+            'mdi.account-minus',
+            color='red',
+            color_active='yellow')
+        self.remu = QPushButton(remu,"")
+        tt.addWidget(self.addu)
+        tt.addWidget(self.editu)
+        tt.addWidget(self.remu)
+        tt.addStretch()
+        self.verif = QCheckBox("Verificar cuenta")
+        tt.addWidget(self.verif)
+        self.cl.addLayout(tt)
+
+        self.setLayout(self.cl)
+
+        self.addu.clicked.connect(self.adduser)
+        self.editu.clicked.connect(self.edituser)
+        self.remu.clicked.connect(self.deluser)
+
+    def adduser(self):
+        self.loggin.emit("Agregando cuenta.", INFORMATION)
+        txt, ok = QInputDialog.getText(self, tr("Agregar Cuenta"),
+                                            tr("Usuario"), 0, "")
+        if not ok:
+            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            return
+        user = txt
+        txt, ok = QInputDialog.getText(self, tr("Agregar Cuenta"),
+                                            tr("Contraseña"), 2, "")
+        if not ok:
+            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            return
+        passw = txt
+        if self.verif.isChecked():
+            self.loggin.emit("Verificando cuenta {0}.".format(user), INFORMATION)
+            try:
+                vv = Nauta.verify(user, passw)
+            except requests.exceptions.ConnectionError:
+                self.loggin.emit("Parece que no hay connexion en este momento. No se puede verificar la cuenta. Desmarque verificar para poder agregarla.", WARNING)
+                self.loggin.emit("No se pudo agregar la cuenta por que no se pudo verificar.", INFORMATION)
+                return
+            if not vv:
+                self.loggin.emit("Cuenta incorrecta.", WARNING)
+                self.loggin.emit("No se pudo agregar la cuenta por que es incorrecta.", INFORMATION)
+                return
+            self.nauta.card_add(user, passw, False)
+            self.nauta.time_left(user, True)
+            self.nauta.expire_date(user, True)
+            self.loggin.emit("Cuenta {0} agergada correctamente.".format(user), INFORMATION)
+            self.nautaw.update_u()
+            return
+        self.nauta.card_add(user, passw, False)
+        self.loggin.emit("Cuenta {0} agergada correctamente.".format(user), INFORMATION)
+        self.nautaw.update_u()
+
+    def edituser(self):
+        cc = self.li.currentItem()
+        if not cc:
+            return
+        txt = cc.text()
+        card=self.nauta.get_card(txt)
+        userc = card.username
+        passwc = card.password
+        self.loggin.emit("Editando cuenta.", INFORMATION)
+        txt, ok = QInputDialog.getText(self, tr("Editar Cuenta"),
+                                            tr("Usuario"), 0, userc)
+        if not ok:
+            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            return
+        user = txt
+        txt, ok = QInputDialog.getText(self, tr("Editar Cuenta"),
+                                            tr("Contraseña"), 2, passwc)
+        if not ok:
+            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            return
+        passw = txt
+        if self.verif.isChecked():
+            self.loggin.emit("Verificando cuenta {0}.".format(user), INFORMATION)
+            try:
+                vv = Nauta.verify(user, passw)
+            except requests.exceptions.ConnectionError:
+                self.loggin.emit("Parece que no hay connexion en este momento. No se puede verificar la cuenta. Desmarque verificar para poder editarla.", WARNING)
+                self.loggin.emit("No se pudo editar la cuenta por que no se pudo verificar.", INFORMATION)
+                return
+            if not vv:
+                self.loggin.emit("Cuenta incorrecta.", WARNING)
+                self.loggin.emit("No se pudo editar la cuenta por que es incorrecta.", INFORMATION)
+                return
+            if user!=userc:
+                self.nauta.card_delete(userc)
+            self.nauta.card_add(user, passw, False)
+            self.nauta.time_left(user, True)
+            self.nauta.expire_date(user, True)
+            self.loggin.emit("Cuenta {0} editada correctamente.".format(user), INFORMATION)
+            self.nautaw.update_u()
+            return
+        if user!=userc:
+            self.nauta.card_delete(userc)
+        self.nauta.card_add(user, passw, False)
+        self.loggin.emit("Cuenta {0} editada correctamente.".format(user), INFORMATION)
+        self.nautaw.update_u()
+
+    def deluser(self):
+        cc = self.li.currentItem()
+        if not cc:
+            return
+        txt = cc.text()
+        card=self.nauta.get_card(txt)
+        userc = card.username
+        self.loggin.emit("Eliminando cuenta.", INFORMATION)
+        if self.nautaw.active and self.nautaw.account==userc:
+            self.loggin.emit("Cuenta en uso. Es necesario desconnectarse primero.", INFORMATION)
+            return
+        ok = QMessageBox.question(self,"Eliminar cuenta","Seguro que quiere eliminar la cuenta {0}?".format(userc))
+        if ok==QMessageBox.No:
+            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            return
+        self.nauta.card_delete(userc)
+        self.nautaw.update_u()
+
+    def load_users(self):
+        self.li.clear()
+        for i in sorted(self.nauta.get_cards(True), key=lambda x: x['username']):
+            self.li.addItem(i['username'])
 
 
 class Main(QMainWindow):
 
     def __init__(self):
         super(Main, self).__init__()
-        self.cw = NautaGUI()
+        self.tabw = QTabWidget(self)
 
-        self.setCentralWidget(self.cw)
+        self.cw1 = NautaGUI()
+        self.tabw.addTab(self.cw1,'Nauta')
+
+        acc = qta.icon(
+            'mdi.account',
+            color='green',
+            color_active='yellow')
+        self.cw2 = UsersGUI()
+        self.tabw.addTab(self.cw2,acc,"")
+
+        #self.tabw.setTabShape(QTabWidget.Triangular)
+        #self.tabw.setTabPosition(QTabWidget.West)
+        self.setCentralWidget(self.tabw)
         self.logs = QTextEdit()
         self.logs.setReadOnly(True)
         self.logsdock = QDockWidget("Logs", self)
@@ -152,13 +401,15 @@ class Main(QMainWindow):
         self.logsdock.setWidget(self.logs)
         self.logsdock.setFeatures(QDockWidget.DockWidgetMovable)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logsdock)
-        self.cw.logginn.connect(self.logger)
+        self.cw1.logginn.connect(self.logger)
+        self.cw2.logginn.connect(self.logger)
 
-    @pyqtSlot(str, int)
-    def logger(self, txt, level):
+    @pyqtSlot(str, str, int)
+    def logger(self, name, txt, level):
         if self.logs.document().lineCount() > 1000:
             self.logs.clear()
-        txtt = logcolor(txt, level)
+        txtt = logcolor(name+': ', NAME)
+        txtt += logcolor(txt, level)
         self.logs.append(txtt)
 
 

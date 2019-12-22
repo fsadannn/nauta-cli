@@ -233,9 +233,10 @@ class DataBase:
 
 class Nauta:
 
-    def __init__(self):
+    def __init__(self, lang='esp'):
         self.__data = DataBase()
         self.__state = OFFLINE
+        self.__lang=lang
 
     @staticmethod
     def parse_time(t):
@@ -304,7 +305,7 @@ class Nauta:
                 cd = self.__data[cd]
             try:
                 self.time_left(cd.username, True)
-                cd =  self.__data[cd.username]
+                #cd =  self.__data[cd.username]
             except Exception as e:
                 # print(e)
                 pass
@@ -326,7 +327,7 @@ class Nauta:
         self.__data[username] = User(username, password)
         if verify:
             self.time_left(username, True)
-            self.expire_date(username, password)
+            self.expire_date(username, True)
         return True
 
     def card_add_alias(self, username: str, alias: str):
@@ -423,19 +424,28 @@ class Nauta:
         try:
             r = session.get("http://google.com")
         except requests.exceptions.ConnectionError:
-            callback("Looks like there is no connection now.", WARNING)
+            if self.__lang=='esp':
+                callback("Parece que no hay connexion en este momento.", WARNING)
+            else:
+                callback("Looks like there is no connection now.", WARNING)
             return 1
 
         soup = bs4.BeautifulSoup(r.text, PARSER)
         action = soup.form["action"]
         if ('google.com' in ''.join(r.cookies.list_domains()) and
             not 'secure.etecsa.net' in action):
-            callback("Looks like you're already connected. Use 'nauta down' to log out.", WARNING)
+            if self.__lang=='esp':
+                callback("Parece que ya está connectado.", WARNING)
+            else:
+                callback("Looks like you're already connected.", WARNING)
             return 1
 
         user = self.__data.get(usern)
         if user is None:
-            callback("Invalid card: {}".format(usern), ERROR)
+            if self.__lang=='esp':
+                callback("Cuenta inválida: {}".format(usern), ERROR)
+            else:
+                callback("Invalid account: {}".format(usern), ERROR)
             return 1
         if isinstance(user,str):
         	user = self.__data.get(user)
@@ -443,7 +453,10 @@ class Nauta:
         username = user.username
 
         tl = user.time_left
-        callback("Using card {}. Time left: {}".format(username, tl), INFORMATION)
+        if self.__lang=='esp':
+            callback("Utilizando cuenta {}. Tiempo restante: {}".format(username, tl), INFORMATION)
+        else:
+            callback("Using card {}. Time left: {}".format(username, tl), INFORMATION)
         log("Connecting with card {}. Time left on card: {}".format(username, tl))
 
         form = Nauta.get_inputs(soup)
@@ -522,7 +535,10 @@ class Nauta:
             )
             with open(LOGOUT_URL_FILE, "w") as f:
                 f.write(logout_url + "\n")
-            callback("Logged in successfully.",INFORMATION)
+            if self.__lang=='esp':
+                callback("Logueado exitosamente.",INFORMATION)
+            else:
+                callback("Logged in successfully.",INFORMATION)
             log("Connected. Actual logout URL is: '{}'".format(logout_url))
             if logout_url == guessed_logout_url:
                 log("Guessed it right ;)")
