@@ -27,7 +27,7 @@ executables = [
 ]
 
 setup(name='Nauta',
-      version='1.0.1',
+      version='1.0.8',
       description='gui and cli for control nauta connection and accounts',
       options=options,
       executables=executables
