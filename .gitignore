@@ -3,3 +3,4 @@ nauta_Cli
 __pycache__
 .vscode
 nauta_old.py
+*.zip

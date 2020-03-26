@@ -73,17 +73,17 @@ class NautaWrap:
 nautaw = NautaWrap()
 
 class Logger(QObject):
-    __slots__ = ('__name', '__signal')
+    __slots__ = ('_name', '_signal')
     def __init__(self, name, signal):
-        self.__name = name
-        self.__signal = signal
+        self._name = name
+        self._signal = signal
 
     def emit(self, txt, num):
-        self.__signal.emit(self.__name, txt, num)
+        self._signal.emit(self._name, txt, num)
 
     @property
     def signal(self):
-        return self.__signal
+        return self._signal
 
 class DigitalClock(QLCDNumber):
 
@@ -414,7 +414,29 @@ class Main(QMainWindow):
 
 
 #if __name__ == '__main__':
+import sys
+import time
+import traceback
+from io import StringIO
 
+def exceptio_hook(exectype, value, tracebackobj):
+    logfile = 'exceptions.log'
+    separator = '-' * 80
+    timeString = time.strftime("%Y-%m-%d, %H:%M:%S")
+    errmsg = '{0}: \n{1}'.format(str(exectype),str(value))
+    tbinfile = StringIO()
+    traceback.print_tb(tracebackobj, None, tbinfile)
+    tbinfile.seek(0)
+    tbininfo = tbinfile.read()
+    sections = [separator,timeString,separator,errmsg,separator,tbininfo]
+    msg='\n'.join(sections)
+    with open(logfile,'w') as f:
+        f.write(msg)
+    errbox = QMessageBox()
+    errbox.setText('Exception\n'+str(msg))
+    errbox.exec_()
+
+sys.excepthook = exceptio_hook
 app = QApplication(sys.argv)
 app.setStyle('Fusion')
 w = Main()
