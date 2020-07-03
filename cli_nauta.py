@@ -13,16 +13,16 @@ class CLI:
         self.nauta.down()
 
     def info(self, user):
-        res = self.nauta.get_card(user)
+        res = self.nauta.get_card(user, as_dict=True)
         if res is None:
             return 'User not in data.'
-        return res.json()
+        return res
 
     def add(self, username, passord, verif: bool=True):
         self.nauta.card_add(username, passord, bool(verif))
 
     def cards(self):
-        return list(self.nauta.get_cards(True))
+        return list(self.nauta.get_cards(as_dict=True))
 
     def delete(self, name):
         self.nauta.card_delete(name)

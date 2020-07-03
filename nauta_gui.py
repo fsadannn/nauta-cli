@@ -1,4 +1,3 @@
-from nauta import Nauta
 import sys
 from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget
 from PyQt5.QtWidgets import QTextEdit, QDockWidget, QTabWidget
@@ -10,16 +9,12 @@ from PyQt5.QtWidgets import QInputDialog, QDialog, QCheckBox, QMessageBox
 from PyQt5.QtCore import QObject
 import qtawesome as qta
 import requests
+from nauta import Nauta, LogLevel
+from nauta.exceptions import ConectionError, BadCredentials
 
 
-INFORMATION = 0
-WARNING = 1
-ERROR = 2
-DEBUG = 3
-NAME = 4
-
-LOG_COLORS = {INFORMATION: "green", WARNING: "orange", ERROR: "red",
-              DEBUG: "blue", NAME: "black"}
+LOG_COLORS = {LogLevel.INFORMATION: "green", LogLevel.WARNING: "orange", LogLevel.ERROR: "red",
+              LogLevel.DEBUG: "blue", LogLevel.NAME: "black"}
 
 
 def logcolor(txt, level):
@@ -33,10 +28,11 @@ def tr(txt):
     return txt
 
 class NautaWrap:
+    nauta = Nauta()
     def __init__(self):
         self._active=False
         self._used_account=None
-        self.nauta=Nauta()
+        #self.nauta=Nauta()
         self.clock=None
         self._f_load_u_ntgui=None
         self._f_load_u_ugui=None
@@ -70,10 +66,7 @@ class NautaWrap:
     def account(self):
         return self._used_account
 
-nautaw = NautaWrap()
-
 class Logger(QObject):
-    __slots__ = ('_name', '_signal')
     def __init__(self, name, signal):
         self._name = name
         self._signal = signal
@@ -114,11 +107,11 @@ class DigitalClock(QLCDNumber):
         self.display(text)
 
 class NautaGUI(QWidget):
-    logginn = pyqtSignal(str, str, int)
+    logginn = pyqtSignal(str, str, LogLevel)
 
     def __init__(self):
         super(NautaGUI, self).__init__()
-        self.nautaw = nautaw
+        self.nautaw = NautaWrap()
         self.nautaw.set_f_load_u_ntgui(self.load_users)
         self.nauta = self.nautaw.nauta
         self.loggin = Logger('NautaGUI', self.logginn)
@@ -177,7 +170,7 @@ class NautaGUI(QWidget):
 
     def load_users(self):
         self.cb.clear()
-        for i in sorted(self.nauta.get_cards(True),key=lambda x: x['username']):
+        for i in sorted(self.nauta.get_cards(as_dict=True),key=lambda x: x['username']):
             self.cb.addItem(i['username'])
         #self.cb.repaint()
 
@@ -204,31 +197,31 @@ class NautaGUI(QWidget):
     @pyqtSlot(int)
     def choise(self, index):
         item = self.cb.itemText(index)
-        data = self.nauta.get_card(item, True)
+        data = self.nauta.get_card(item, as_dict=True)
         txt = 'Información de Usuario:'
-        self.loggin.emit(txt, INFORMATION)
+        self.loggin.emit(txt, LogLevel.INFORMATION)
         tt = str(data['username'])
         self.nautaw.set_account(tt)
         txt = 'Nombre de ususario: '+tt
         self.username.setText(tt)
-        self.loggin.emit(txt, INFORMATION)
+        self.loggin.emit(txt, LogLevel.INFORMATION)
         tt=str(data['time_left'])
         txt = 'Tiempo restante: '+tt
         self.time_left.setText(tt)
-        self.loggin.emit(txt, INFORMATION)
+        self.loggin.emit(txt, LogLevel.INFORMATION)
         tt = str(data['expire_date'])
         txt = 'Fecha de expiración: '+tt
         self.expire_date.setText(tt)
-        self.loggin.emit(txt, INFORMATION)
+        self.loggin.emit(txt, LogLevel.INFORMATION)
 
 class UsersGUI(QWidget):
 
-    logginn = pyqtSignal(str, str, int)
+    logginn = pyqtSignal(str, str, LogLevel)
 
     def __init__(self):
         super(UsersGUI, self).__init__()
         self.loggin = Logger('UsersGUI', self.logginn)
-        self.nautaw = nautaw
+        self.nautaw = NautaWrap()
         self.nautaw.set_f_load_u_ugui(self.load_users)
         self.nauta = self.nautaw.nauta
 
@@ -269,39 +262,36 @@ class UsersGUI(QWidget):
         self.remu.clicked.connect(self.deluser)
 
     def adduser(self):
-        self.loggin.emit("Agregando cuenta.", INFORMATION)
+        self.loggin.emit("Agregando cuenta.", LogLevel.INFORMATION)
         txt, ok = QInputDialog.getText(self, tr("Agregar Cuenta"),
                                             tr("Usuario"), 0, "")
         if not ok:
-            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            self.loggin.emit("Operacion cancelada por el usuario.", LogLevel.INFORMATION)
             return
         user = txt
         txt, ok = QInputDialog.getText(self, tr("Agregar Cuenta"),
                                             tr("Contraseña"), 2, "")
         if not ok:
-            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            self.loggin.emit("Operacion cancelada por el usuario.", LogLevel.INFORMATION)
             return
         passw = txt
         if self.verif.isChecked():
-            self.loggin.emit("Verificando cuenta {0}.".format(user), INFORMATION)
             try:
-                vv = Nauta.verify(user, passw)
-            except requests.exceptions.ConnectionError:
-                self.loggin.emit("Parece que no hay connexion en este momento. No se puede verificar la cuenta. Desmarque verificar para poder agregarla.", WARNING)
-                self.loggin.emit("No se pudo agregar la cuenta por que no se pudo verificar.", INFORMATION)
+                self.loggin.emit("Verificando cuenta {0}.".format(user), LogLevel.INFORMATION)
+                self.nauta.card_add(user, passw, verify=True, raise_exception=True)
+            except ConectionError:
+                self.loggin.emit("Parece que no hay connexion en este momento. No se puede verificar la cuenta. Desmarque verificar para poder agregarla.", LogLevel.WARNING)
+                self.loggin.emit("No se pudo agregar la cuenta por que no se pudo verificar.", LogLevel.INFORMATION)
                 return
-            if not vv:
-                self.loggin.emit("Cuenta incorrecta.", WARNING)
-                self.loggin.emit("No se pudo agregar la cuenta por que es incorrecta.", INFORMATION)
+            except BadCredentials:
+                self.loggin.emit("Cuenta incorrecta.", LogLevel.WARNING)
+                self.loggin.emit("No se pudo agregar la cuenta por que es incorrecta.", LogLevel.INFORMATION)
                 return
-            self.nauta.card_add(user, passw, False)
-            self.nauta.time_left(user, True)
-            self.nauta.expire_date(user, True)
-            self.loggin.emit("Cuenta {0} agergada correctamente.".format(user), INFORMATION)
+            self.loggin.emit("Cuenta {0} agergada correctamente.".format(user), LogLevel.INFORMATION)
             self.nautaw.update_u()
             return
-        self.nauta.card_add(user, passw, False)
-        self.loggin.emit("Cuenta {0} agergada correctamente.".format(user), INFORMATION)
+        self.nauta.card_add(user, passw, verify=False, raise_exception=False)
+        self.loggin.emit("Cuenta {0} agergada correctamente.".format(user), LogLevel.INFORMATION)
         self.nautaw.update_u()
 
     def edituser(self):
@@ -309,46 +299,41 @@ class UsersGUI(QWidget):
         if not cc:
             return
         txt = cc.text()
-        card=self.nauta.get_card(txt)
+        card=self.nauta.get_card(txt, try_update=False)
         userc = card.username
         passwc = card.password
-        self.loggin.emit("Editando cuenta.", INFORMATION)
+        self.loggin.emit("Editando cuenta.", LogLevel.INFORMATION)
         txt, ok = QInputDialog.getText(self, tr("Editar Cuenta"),
                                             tr("Usuario"), 0, userc)
         if not ok:
-            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            self.loggin.emit("Operacion cancelada por el usuario.", LogLevel.INFORMATION)
             return
         user = txt
         txt, ok = QInputDialog.getText(self, tr("Editar Cuenta"),
                                             tr("Contraseña"), 2, passwc)
         if not ok:
-            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            self.loggin.emit("Operacion cancelada por el usuario.", LogLevel.INFORMATION)
             return
         passw = txt
         if self.verif.isChecked():
-            self.loggin.emit("Verificando cuenta {0}.".format(user), INFORMATION)
+            self.loggin.emit("Verificando cuenta {0}.".format(user), LogLevel.INFORMATION)
             try:
-                vv = Nauta.verify(user, passw)
-            except requests.exceptions.ConnectionError:
-                self.loggin.emit("Parece que no hay connexion en este momento. No se puede verificar la cuenta. Desmarque verificar para poder editarla.", WARNING)
-                self.loggin.emit("No se pudo editar la cuenta por que no se pudo verificar.", INFORMATION)
+                vv = self.nauta.verify(user, passw)
+            except (requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout):
+                self.loggin.emit("Parece que no hay connexion en este momento. No se puede verificar la cuenta. Desmarque verificar para poder editarla.", LogLevel.WARNING)
+                self.loggin.emit("No se pudo editar la cuenta por que no se pudo verificar.", LogLevel.INFORMATION)
                 return
             if not vv:
-                self.loggin.emit("Cuenta incorrecta.", WARNING)
-                self.loggin.emit("No se pudo editar la cuenta por que es incorrecta.", INFORMATION)
+                self.loggin.emit("Cuenta incorrecta.", LogLevel.WARNING)
+                self.loggin.emit("No se pudo editar la cuenta por que es incorrecta.", LogLevel.INFORMATION)
                 return
-            if user!=userc:
-                self.nauta.card_delete(userc)
-            self.nauta.card_add(user, passw, False)
-            self.nauta.time_left(user, True)
-            self.nauta.expire_date(user, True)
-            self.loggin.emit("Cuenta {0} editada correctamente.".format(user), INFORMATION)
+            card=self.nauta.get_card(txt, try_update=True)
+            self.nauta.card_update(userc, card.to_json())
+            self.loggin.emit("Cuenta {0} editada correctamente.".format(user), LogLevel.INFORMATION)
             self.nautaw.update_u()
             return
-        if user!=userc:
-            self.nauta.card_delete(userc)
-        self.nauta.card_add(user, passw, False)
-        self.loggin.emit("Cuenta {0} editada correctamente.".format(user), INFORMATION)
+        self.nauta.card_update(userc, card.to_json())
+        self.loggin.emit("Cuenta {0} editada correctamente.".format(user), LogLevel.INFORMATION)
         self.nautaw.update_u()
 
     def deluser(self):
@@ -356,22 +341,22 @@ class UsersGUI(QWidget):
         if not cc:
             return
         txt = cc.text()
-        card=self.nauta.get_card(txt)
+        card=self.nauta.get_card(txt, try_update=False)
         userc = card.username
-        self.loggin.emit("Eliminando cuenta.", INFORMATION)
+        self.loggin.emit("Eliminando cuenta.", LogLevel.INFORMATION)
         if self.nautaw.active and self.nautaw.account==userc:
-            self.loggin.emit("Cuenta en uso. Es necesario desconnectarse primero.", INFORMATION)
+            self.loggin.emit("Cuenta en uso. Es necesario desconnectarse primero.", LogLevel.INFORMATION)
             return
         ok = QMessageBox.question(self,"Eliminar cuenta","Seguro que quiere eliminar la cuenta {0}?".format(userc))
         if ok==QMessageBox.No:
-            self.loggin.emit("Operacion cancelada por el usuario.", INFORMATION)
+            self.loggin.emit("Operacion cancelada por el usuario.", LogLevel.INFORMATION)
             return
         self.nauta.card_delete(userc)
         self.nautaw.update_u()
 
     def load_users(self):
         self.li.clear()
-        for i in sorted(self.nauta.get_cards(True), key=lambda x: x['username']):
+        for i in sorted(self.nauta.get_cards(as_dict=True), key=lambda x: x['username']):
             self.li.addItem(i['username'])
 
 
@@ -403,15 +388,20 @@ class Main(QMainWindow):
         self.addDockWidget(Qt.BottomDockWidgetArea, self.logsdock)
         self.cw1.logginn.connect(self.logger)
         self.cw2.logginn.connect(self.logger)
+        self.tabw.currentChanged.connect(self.change)
 
-    @pyqtSlot(str, str, int)
+    @pyqtSlot(str, str, LogLevel)
     def logger(self, name, txt, level):
         if self.logs.document().lineCount() > 1000:
             self.logs.clear()
-        txtt = logcolor(name+': ', NAME)
+        txtt = logcolor(name+': ', LogLevel.NAME)
         txtt += logcolor(txt, level)
         self.logs.append(txtt)
 
+    @pyqtSlot(int)
+    def change(self, index):
+        if index == 0:
+            self.cw1.load_users()
 
 #if __name__ == '__main__':
 import sys
@@ -435,11 +425,14 @@ def exceptio_hook(exectype, value, tracebackobj):
     errbox = QMessageBox()
     errbox.setText('Exception\n'+str(msg))
     errbox.exec_()
+def main():
+    sys.excepthook = exceptio_hook
+    app = QApplication(sys.argv)
+    app.setStyle('Fusion')
+    w = Main()
+    w.resize(784, 521)
+    w.show()
+    sys.exit(app.exec_())
 
-sys.excepthook = exceptio_hook
-app = QApplication(sys.argv)
-app.setStyle('Fusion')
-w = Main()
-w.resize(784, 521)
-w.show()
-sys.exit(app.exec_())
+if __name__ == "__main__":
+    main()

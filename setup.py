@@ -12,10 +12,13 @@ if sys.platform == 'win32':
 
 options = {
     'build_exe': {
-        'includes': ['atexit','nauta'],
-        'packages': ['bs4', 'lxml','requests', 'lockfile','queue','dbm','pyqt5','pipes','termcolor'],
+        'includes': ['atexit', 'nauta'],
+        'packages': ['parsel','lxml','requests','pyqt5.QtWidgets','pyqt5.QtCore','termcolor',
+                    'threading', 'qtawesome', 'six', 'pipes', 'w3lib', 'cssselect', 'tinydb',
+                    'ctypes','colorama'],
         'include_msvcr': True,
-        'optimize': 2
+        'optimize': 2,
+        'excludes': ['tkinter']
     }
 }
 
@@ -27,7 +30,7 @@ executables = [
 ]
 
 setup(name='Nauta',
-      version='1.0.8',
+      version='2.0.0',
       description='gui and cli for control nauta connection and accounts',
       options=options,
       executables=executables
